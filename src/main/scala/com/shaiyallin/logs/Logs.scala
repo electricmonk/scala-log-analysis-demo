@@ -2,7 +2,7 @@ package com.shaiyallin.logs
 
 import java.time.{ZoneOffset, LocalDateTime}
 import java.time.format.DateTimeFormatter
-import scala.io.Source
+import scala.io.{Codec, Source}
 import com.netaporter.uri.Uri
 import com.netaporter.uri.parsing.UriParser
 import com.netaporter.uri.config.UriConfig
@@ -36,9 +36,13 @@ object Request {
 }
 
 object Logs extends App {
+  import scala.io._
+  import java.time._
+
   type Requests = Seq[Request]
+  implicit val codec = Codec.ISO8859
   val log = Source.fromFile("./request.100th.log")
-  val allRequets = log.getLines().collect(Request.parse).toSeq
+  val allRequests = log.getLines().collect(Request.parse).toList
 
   val subnetOf = { ip: String => if (ip.contains(".")) ip.substring(0, ip.lastIndexOf('.')) else ip }
   val statusIs = { f: (Int => Boolean) => requests: Requests => requests.filter(r => f(r.status))}
@@ -58,20 +62,20 @@ object Logs extends App {
 
   val summary = { rs: Requests => Seq(totalCountFor(rs), totalSizeFor(rs), errorRateFor(rs)) }
 
-  println(summary(allRequets).mkString("\n"))
+  println(summary(allRequests).mkString("\n"))
 
-  val (subnet, requestsFromMostCommonSubnet) = allRequets.groupBy(r => subnetOf(r.ip)).maxBy {case (_, rs) => rs.size}
+  val (subnet, requestsFromMostCommonSubnet) = allRequests.groupBy(r => subnetOf(r.ip)).maxBy {case (_, rs) => rs.size}
   println(f"Most common subnet:\n\t${summary(requestsFromMostCommonSubnet).mkString("\n\t")}")
 
   println(f"10 Most popular paths:")
-  popularPaths(allRequets).take(10) foreach { case (path, rs) => println(f"$path\n\t${summary(rs).mkString("\n\t")}")}
+  popularPaths(allRequests).take(10) foreach { case (path, rs) => println(f"$path\n\t${summary(rs).mkString("\n\t")}")}
 
 
-  val mostErroneous = popularPaths(errors(allRequets)).head
+  val mostErroneous = popularPaths(errors(allRequests)).head
   val errorsByType = mostErroneous._2.groupBy(_.status).map { case (status, rs) => s"${rs.size} requests resulting in status $status"}
   println(f"Most erroneous path: ${mostErroneous._1}\n\t${errorsByType.mkString("\n\t")}")
 
-  allRequets.groupBy(request => request.date.withSecond(0).withMinute(0)).toSeq.sortBy { case (date, rs) => date.toEpochSecond(ZoneOffset.UTC)}.map {case (date, rs) =>
+  allRequests.groupBy(request => request.date.withSecond(0).withMinute(0)).toSeq.sortBy { case (date, rs) => date.toEpochSecond(ZoneOffset.UTC)}.map {case (date, rs) =>
     println(s"$date: \n\t${summary(rs).mkString("\n\t")}")
   }
 }
